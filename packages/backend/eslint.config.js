@@ -12,7 +12,7 @@ export default {
       "error",
       {
         code: 120,
-        tabWidth: 4,
+        tabWidth: 2,
         comments: 150,
       },
     ],

@@ -11,7 +11,7 @@ import indexRoutes from "./routes/index.routes.js";
 import { COOKIE_KEY, HOST, PORT } from "./config/configEnv.js";
 import { connectDB} from "./config/configDb.js";
 import { passportJwtSetup} from "./auth/passport.auth.js";
-import { createUsers } from "./config/initialSetup.js";
+import { createPermissions, createRoles, createUsers } from "./config/initialSetup.js";
 async function setupServer() {
     try {
         const app = express();
@@ -63,7 +63,7 @@ async function setupServer() {
         app.use("/api", indexRoutes);
         
         app.listen(PORT, () => {
-            console.log(`Servidor corriendo en ${HOST}:${PORT}/api`);
+            console.log(`Servidor corriendo en http://${HOST}:${PORT}/api`);
         });
     } catch (error) {
         console.log("Error en index.js -> setupServer(), el error es: ", error);
@@ -74,6 +74,8 @@ async function setupAPI() {
     try {
         await connectDB();
         await setupServer();
+        await createPermissions();
+        await createRoles();
         await createUsers();
     } catch (error) {
         console.log("Error en index.js -> setupAPI(), el error es: ", error);

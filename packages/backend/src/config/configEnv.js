@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 
 const env = process.env.NODE_ENV || "development";
 
+console.log(`Cargando variables de entorno desde: .env.${env}`);
 const envFilePath = path.resolve(__dirname, `.env.${env}`);
 
 dotenv.config({ path: envFilePath });

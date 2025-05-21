@@ -8,6 +8,7 @@
     "dev": "cross-env NODE_ENV=development nodemon src/index.js",
     "test": "cross-env NODE_ENV=test vitest",
     "test:coverage": "cross-env NODE_ENV=test vitest run --coverage",
+    "db:reset": "node src/config/resetDb.js",
     "start": "cross-env NODE_ENV=production node src/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
