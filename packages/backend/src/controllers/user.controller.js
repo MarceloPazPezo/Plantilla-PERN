@@ -4,10 +4,12 @@ import {
   getUserService,
   getUsersService,
   updateUserService,
+  createUserService,
 } from "../services/user.service.js";
 import {
   userBodyValidation,
   userQueryValidation,
+  userCreateValidation,
 } from "../validations/user.validation.js";
 import {
   handleErrorClient,
@@ -119,6 +121,24 @@ export async function deleteUser(req, res) {
     if (errorUserDelete) return handleErrorClient(res, 404, "Error eliminado al usuario", errorUserDelete);
 
     handleSuccess(res, 200, "Usuario eliminado correctamente", userDelete);
+  } catch (error) {
+    handleErrorServer(res, 500, error.message);
+  }
+}
+
+export async function createUser(req, res) {
+  try {
+    const { body } = req;
+
+    const { error } = userCreateValidation.validate(body);
+
+    if (error) return handleErrorClient(res, 400, error.message);
+
+    const [user, errorUser] = await createUserService(body);
+
+    if (errorUser) return handleErrorClient(res, 400, errorUser);
+
+    handleSuccess(res, 201, "Usuario creado correctamente", user);
   } catch (error) {
     handleErrorServer(res, 500, error.message);
   }

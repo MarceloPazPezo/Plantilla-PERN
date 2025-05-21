@@ -1,21 +1,27 @@
 "use strict";
-import User from "../entity/user.entity.js";
+import User from "../entities/user.entity.js";
+import Role from "../entities/role.entity.js";
 import { AppDataSource } from "../config/configDb.js";
 import { comparePassword, encryptPassword } from "../helpers/bcrypt.helper.js";
 
 export async function getUserService(query) {
   try {
-    const { rut, id, email } = query;
+    const { rut, id, email, telefono } = query;
 
     const userRepository = AppDataSource.getRepository(User);
 
     const userFound = await userRepository.findOne({
-      where: [{ id: id }, { rut: rut }, { email: email }],
+      where: [
+        { id: id },
+        { rut: rut },
+        { email: email },
+        { telefono: telefono },
+      ],
     });
 
     if (!userFound) return [null, "Usuario no encontrado"];
 
-    const { password, ...userData } = userFound;
+    const { hashedPassword, ...userData } = userFound;
 
     return [userData, null];
   } catch (error) {
@@ -24,20 +30,54 @@ export async function getUserService(query) {
   }
 }
 
-export async function getUsersService() {
+export async function getUsersService(queryParams = {}) {
   try {
     const userRepository = AppDataSource.getRepository(User);
 
-    const users = await userRepository.find();
+    const queryBuilder = userRepository
+      .createQueryBuilder("user")
+      .leftJoinAndSelect("user.roles", "role")
+      .select([
+        "user.id",
+        "user.nombres",
+        "user.apellidos",
+        "user.rut",
+        "user.email",
+        "user.activo",
+        "user.createdAt",
+        "user.updatedAt",
+        "role.id",
+        "role.nombre",
+      ])
+      .orderBy("user.id", "ASC")
+      .addOrderBy("role.id", "ASC");
 
-    if (!users || users.length === 0) return [null, "No hay usuarios"];
+    const { page = 1, limit = 10 } = queryParams;
+    const offset = (page - 1) * limit;
+    queryBuilder.skip(offset).take(limit);
 
-    const usersData = users.map(({ password, ...user }) => user);
+    const [users, total] = await queryBuilder.getManyAndCount();
 
-    return [usersData, null];
+    if (!users || users.length === 0) {
+      return [null, "No se encontraron usuarios."];
+    }
+
+    const usersSummarized = users.map(user => ({
+      nombres: user.nombres,
+      apellidos: user.apellidos,
+      rut: user.rut,
+      email: user.email,
+      activo: user.activo,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      roles: user.roles ? user.roles.map(r => r.nombre) : []
+    }));
+
+    return [usersSummarized, null, total];
+
   } catch (error) {
-    console.error("Error al obtener a los usuarios:", error);
-    return [null, "Error interno del servidor"];
+    console.error("Error al obtener los usuarios:", error);
+    return [null, "Error interno del servidor al obtener usuarios."];
   }
 }
 
@@ -124,6 +164,51 @@ export async function deleteUserService(query) {
     return [dataUser, null];
   } catch (error) {
     console.error("Error al eliminar un usuario:", error);
+    return [null, "Error interno del servidor"];
+  }
+}
+
+export async function createUserService(body) {
+  try {
+    const userRepository = AppDataSource.getRepository(User);
+    const roleRepository = AppDataSource.getRepository(Role);
+
+    const existingUser = await userRepository.findOne({
+      where: [
+        { rut: body.rut },
+        { email: body.email },
+        { telefono: body.telefono },
+      ],
+    });
+
+    if (existingUser) {
+      return [null, "Ya existe un usuario con el mismo rut o email o telefono"];
+    }
+
+    const userRole = await roleRepository.findOneBy({ nombre: "Usuario" });
+    if (!userRole) {
+      return [null, "Rol de usuario no encontrado"];
+    }
+
+    const newUser = userRepository.create({
+      nombres: body.nombres,
+      apellidos: body.apellidos,
+      rut: body.rut,
+      fechaNacimiento: body.fechaNacimiento,
+      email: body.email,
+      telefono: body.telefono,
+      roles: [userRole],
+      hashedPassword: await encryptPassword(body.password),
+      activo: true,
+    });
+
+    const savedUser = await userRepository.save(newUser);
+
+    const { hashedPassword, ...userData } = savedUser;
+
+    return [userData, null];
+  } catch (error) {
+    console.error("Error al crear un usuario:", error);
     return [null, "Error interno del servidor"];
   }
 }

@@ -13,12 +13,10 @@ const UserSchema = new EntitySchema({
         nombres: {
             type: "simple-array",
             nullable: true,
-            name: "nombres_pila",
         },
         apellidos: {
             type: "simple-array",
             nullable: true,
-            name: "apellidos",
         },
         rut: {
             type: "varchar",
@@ -29,7 +27,6 @@ const UserSchema = new EntitySchema({
         fechaNacimiento: {
             type: "date",
             nullable: true,
-            name: "fecha_nacimiento",
         },
         email: {
             type: "varchar",
@@ -46,22 +43,18 @@ const UserSchema = new EntitySchema({
             type: "varchar",
             length: 255,
             nullable: false,
-            name: "hashed_password",
         },
         activo: {
             type: "boolean",
             default: true,
-            name: "activo",
         },
         createdAt: {
             type: "timestamp with time zone",
             createDate: true,
-            name: "fecha_creacion",
         },
         updatedAt: {
             type: "timestamp with time zone",
             updateDate: true,
-            name: "fecha_actualizacion",
         },
     },
     indices: [

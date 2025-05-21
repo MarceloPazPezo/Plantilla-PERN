@@ -1,308 +1,313 @@
 "use strict";
 import Joi from "joi";
+import { normalizeRut, validateRutDv } from '../helpers/rut.helper.js';
 
 const domainEmailValidator = (value, helper) => {
-  if (!value.endsWith("@gmail.com")) {
+  if (!value.endsWith("@example.cl") && !value.endsWith("@gmail.com")) {
     return helper.message(
-      "El correo electrónico debe ser del dominio @gmail.com"
+      "El correo electrónico debe ser de un dominio permitido (ej. @example.cl, @gmail.com)"
     );
   }
   return value;
 };
 
-export const createUserValidation = Joi.object({
+const normalizedRutPattern = /^\d{7,8}[\dkK]$/;
+
+const joiRutValidator = (value, helpers) => {
+  const normalized = normalizeRut(value);
+
+  console.log("Normalized RUT:", normalized);
+
+  if (!normalized) {
+    return helpers.error("string.rut.invalidFormat", { value });
+  }
+
+  if (!normalizedRutPattern.test(normalized)) {
+    return helpers.error("string.rut.invalidNormalizedFormat", { value: normalized });
+  }
+
+  if (!validateRutDv(normalized)) {
+    console.log("Invalid RUT DV:", normalized);
+    return helpers.error("string.rut.invalidDv", { value: normalized });
+  }
+
+  return normalized;
+};
+
+const namePattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s'-]+$/;
+
+const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)\S{8,}$/;
+
+// 1. Esquema para Parámetros de Consulta (Query)
+export const userQueryValidation = Joi.object({
+  id: Joi.number()
+    .integer()
+    .positive()
+    .messages({
+      "number.base": "El ID debe ser un número.",
+      "number.integer": "El ID debe ser un número entero.",
+      "number.positive": "El ID debe ser un número positivo.",
+    }),
+  rut: Joi.string()
+    .pattern(normalizedRutPattern)
+    .messages({
+      "string.base": "El RUT debe ser de tipo string.",
+      "string.pattern.base": "Formato de RUT inválido. Ejemplo: 12.345.678-9 o 12345678-9.",
+    }),
+  email: Joi.string()
+    .email({ tlds: { allow: false } }) // tlds:false para validación general de formato email
+    .messages({
+      "string.base": "El correo electrónico debe ser de tipo string.",
+      "string.email": "El formato del correo electrónico es inválido.",
+    }),
+  activo: Joi.boolean()
+    .messages({
+      "boolean.base": "El estado 'activo' debe ser un valor booleano (true/false)."
+    })
+})
+  .or("id", "rut", "email")
+  .unknown(false)
+  .messages({
+    "object.unknown": "No se permiten parámetros de consulta adicionales.",
+    "object.missing": "Debes proporcionar al menos un parámetro de búsqueda: id, rut o email.",
+  });
+
+// 2. Esquema para el Cuerpo de la Solicitud al Crear un Usuario (Create)
+export const userCreateValidation = Joi.object({
   nombres: Joi.array()
     .items(
       Joi.string()
         .min(2)
         .max(50)
-        .pattern(/^[a-zA-ZáéíóúÁÉÍÓÚñÑàèìòùÀÈÌÒÙ\s']+$/)
+        .pattern(namePattern)
         .messages({
-          "string.base": "Cada nombre de pila debe ser de tipo string.",
-          "string.empty": "El nombre de pila no puede estar vacío.",
-          "string.min": "Cada nombre de pila debe tener como mínimo {#limit} caracteres.",
-          "string.max": "Cada nombre de pila debe tener como máximo {#limit} caracteres.",
-          "string.pattern.base": "Cada nombre de pila solo puede contener letras, espacios y apóstrofes.",
+          "string.base": "Cada nombre debe ser de tipo string.",
+          "string.empty": "Un nombre no puede estar vacío.",
+          "string.min": "Un nombre debe tener como mínimo {#limit} caracteres.",
+          "string.max": "Un nombre debe tener como máximo {#limit} caracteres.",
+          "string.pattern.base": "Un nombre solo puede contener letras, espacios, apóstrofes o guiones.",
         })
     )
     .min(1)
-    .max(3)
     .required()
     .messages({
-      "array.base": "Los nombres de pila deben ser un arreglo.",
-      "array.min": "Debes proporcionar al menos {#limit} nombre de pila.",
-      "array.max": "Puedes proporcionar como máximo {#limit} nombres de pila.",
-      "any.required": "Los nombres de pila son requeridos.",
+      "array.base": "El campo 'nombres' debe ser un array.",
+      "array.min": "Debes proporcionar al menos un nombre.",
+      "any.required": "El campo 'nombres' es obligatorio.",
     }),
-
   apellidos: Joi.array()
     .items(
       Joi.string()
         .min(2)
         .max(50)
-        .pattern(/^[a-zA-ZáéíóúÁÉÍÓÚñÑàèìòùÀÈÌÒÙ\s']+$/)
+        .pattern(namePattern)
         .messages({
           "string.base": "Cada apellido debe ser de tipo string.",
-          "string.empty": "El apellido no puede estar vacío.",
-          "string.min": "Cada apellido debe tener como mínimo {#limit} caracteres.",
-          "string.max": "Cada apellido debe tener como máximo {#limit} caracteres.",
-          "string.pattern.base": "Cada apellido solo puede contener letras, espacios y apóstrofes.",
+          "string.empty": "Un apellido no puede estar vacío.",
+          "string.min": "Un apellido debe tener como mínimo {#limit} caracteres.",
+          "string.max": "Un apellido debe tener como máximo {#limit} caracteres.",
+          "string.pattern.base": "Un apellido solo puede contener letras, espacios, apóstrofes o guiones.",
         })
     )
     .min(1)
-    .max(2)
     .required()
     .messages({
-      "array.base": "Los apellidos deben ser un arreglo.",
-      "array.min": "Debes proporcionar al menos {#limit} apellido.",
-      "array.max": "Puedes proporcionar como máximo {#limit} apellidos.",
-      "any.required": "Los apellidos son requeridos.",
+      "array.base": "El campo 'apellidos' debe ser un array.",
+      "array.min": "Debes proporcionar al menos un apellido.",
+      "any.required": "El campo 'apellidos' es obligatorio.",
     }),
-
   rut: Joi.string()
-    .min(9)
-    .max(12)
-    .pattern(/^(?:(?:[1-9]\d{0}|[1-2]\d{1})(\.\d{3}){2}|[1-9]\d{6}|[1-2]\d{7}|29\.999\.999|29999999)-[\dkK]$/)
+    .custom(joiRutValidator, "Validación completa de RUT")
     .required()
     .messages({
-      "string.empty": "El rut no puede estar vacío.",
-      "string.base": "El rut debe ser de tipo string.",
-      "string.min": "El rut debe tener como mínimo {#limit} caracteres.",
-      "string.max": "El rut debe tener como máximo {#limit} caracteres.",
-      "string.pattern.base": "Formato rut inválido, debe ser xx.xxx.xxx-x o xxxxxxxx-x.",
-      "any.required": "El rut es requerido.",
+      "string.base": "El RUT debe ser de tipo string.",
+      "any.required": "El RUT es obligatorio.",
+      "string.rut.invalidFormat": "El formato inicial del RUT es inválido o no pudo ser procesado.",
+      "string.rut.invalidNormalizedFormat": "El RUT normalizado no cumple el formato esperado (ej: XXXXXXXXK).",
+      "string.rut.invalidDv": "El dígito verificador del RUT es incorrecto."
     }),
-
-  email: Joi.string()
-    .min(10) // Ajustado para ser más realista con el dominio
-    .max(255) // Longitud estándar para emails
-    .email({ tlds: { allow: false } }) // Valida formato email, tlds:false para no requerir TLD específico si tu validador custom lo cubre
-    .custom(domainEmailValidator, "Validación dominio email")
-    .required()
-    .messages({
-      "string.empty": "El correo electrónico no puede estar vacío.",
-      "string.base": "El correo electrónico debe ser de tipo string.",
-      "string.email": "El formato del correo electrónico es inválido.", // Mensaje genérico para .email()
-      "string.min": "El correo electrónico debe tener como mínimo {#limit} caracteres.",
-      "string.max": "El correo electrónico debe tener como máximo {#limit} caracteres.",
-      "any.required": "El correo electrónico es requerido.",
-    }),
-
-  password: Joi.string()
-    .min(8)
-    .max(100) // Para contraseñas, es mejor no limitar tanto el máximo. El hash tendrá longitud fija.
-    // .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/) // Ejemplo de patrón más seguro
-    .pattern(/^[a-zA-Z0-9@$!%*?&]+$/) // Un patrón un poco más flexible que solo alfanumérico
-    .required()
-    .messages({
-      "string.empty": "La contraseña no puede estar vacía.",
-      "string.base": "La contraseña debe ser de tipo string.",
-      "string.min": "La contraseña debe tener como mínimo {#limit} caracteres.",
-      "string.max": "La contraseña debe tener como máximo {#limit} caracteres.",
-      "string.pattern.base": "La contraseña contiene caracteres no permitidos o no cumple con los requisitos de complejidad.",
-      "any.required": "La contraseña es requerida.",
-    }),
-
-  rol: Joi.string()
-    .min(3)
-    .max(50)
-    .required()
-    .messages({
-      "string.empty": "El rol no puede estar vacío.",
-      "string.base": "El rol debe ser de tipo string.",
-      "string.min": "El rol debe tener como mínimo {#limit} caracteres.",
-      "string.max": "El rol debe tener como máximo {#limit} caracteres.",
-      "any.required": "El rol es requerido.",
-    }),
-
-  activo: Joi.boolean() // Añadido campo activo, opcional en la creación (podría tener un default)
+  fechaNacimiento: Joi.date()
+    .iso()
+    .less('now')
     .optional()
     .messages({
-        "boolean.base": "El campo activo debe ser un valor booleano (true/false)."
-    })
-
-})
-.unknown(false) // No permitir propiedades adicionales
-.messages({
-  "object.unknown": "No se permiten propiedades adicionales en la solicitud.",
-});
-
-
-// Esquema para la actualización de un usuario (donde los campos son opcionales)
-// (Este es una adaptación de tu userBodyValidation original)
-export const updateUserValidation = Joi.object({
-  nombresPila: Joi.array()
-    .items(
-      Joi.string()
-        .min(2)
-        .max(50)
-        .pattern(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s']+$/)
-        .messages({
-          "string.base": "Cada nombre de pila debe ser de tipo string.",
-          "string.empty": "El nombre de pila no puede estar vacío.",
-          "string.min": "Cada nombre de pila debe tener como mínimo {#limit} caracteres.",
-          "string.max": "Cada nombre de pila debe tener como máximo {#limit} caracteres.",
-          "string.pattern.base": "Cada nombre de pila solo puede contener letras, espacios y apóstrofes.",
-        })
-    )
-    .min(1)
-    .max(3)
-    .optional() // Opcional para actualización
-    .messages({
-      "array.base": "Los nombres de pila deben ser un arreglo.",
-      "array.min": "Debes proporcionar al menos {#limit} nombre de pila si actualizas este campo.",
-      "array.max": "Puedes proporcionar como máximo {#limit} nombres de pila.",
+      "date.base": "La fecha de nacimiento debe ser una fecha válida.",
+      "date.format": "La fecha de nacimiento debe estar en formato ISO (YYYY-MM-DD).",
+      "date.less": "La fecha de nacimiento debe ser anterior a la fecha actual.",
     }),
-
-  apellidos: Joi.array()
-    .items(
-      Joi.string()
-        .min(2)
-        .max(50)
-        .pattern(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s']+$/)
-        .messages({
-          "string.base": "Cada apellido debe ser de tipo string.",
-          "string.empty": "El apellido no puede estar vacío.",
-          "string.min": "Cada apellido debe tener como mínimo {#limit} caracteres.",
-          "string.max": "Cada apellido debe tener como máximo {#limit} caracteres.",
-          "string.pattern.base": "Cada apellido solo puede contener letras, espacios y apóstrofes.",
-        })
-    )
-    .min(1)
-    .max(2)
-    .optional() // Opcional para actualización
-    .messages({
-      "array.base": "Los apellidos deben ser un arreglo.",
-      "array.min": "Debes proporcionar al menos {#limit} apellido si actualizas este campo.",
-      "array.max": "Puedes proporcionar como máximo {#limit} apellidos.",
-    }),
-
-  rut: Joi.string()
-    .min(9)
-    .max(12)
-    .pattern(/^(?:(?:[1-9]\d{0}|[1-2]\d{1})(\.\d{3}){2}|[1-9]\d{6}|[1-2]\d{7}|29\.999\.999|29999999)-[\dkK]$/)
-    .optional()
-    .messages({
-      "string.empty": "El rut no puede estar vacío.",
-      "string.base": "El rut debe ser de tipo string.",
-      "string.min": "El rut debe tener como mínimo {#limit} caracteres.",
-      "string.max": "El rut debe tener como máximo {#limit} caracteres.",
-      "string.pattern.base": "Formato rut inválido, debe ser xx.xxx.xxx-x o xxxxxxxx-x.",
-    }),
-
   email: Joi.string()
-    .min(10)
-    .max(255)
     .email({ tlds: { allow: false } })
-    .custom(domainEmailValidator, "Validación dominio email")
-    .optional()
+    .min(5)
+    .max(255)
+    .custom(domainEmailValidator, "Validación de dominio de correo electrónico")
+    .required()
     .messages({
       "string.empty": "El correo electrónico no puede estar vacío.",
       "string.base": "El correo electrónico debe ser de tipo string.",
       "string.email": "El formato del correo electrónico es inválido.",
       "string.min": "El correo electrónico debe tener como mínimo {#limit} caracteres.",
       "string.max": "El correo electrónico debe tener como máximo {#limit} caracteres.",
+      "any.required": "El correo electrónico es obligatorio.",
     }),
-
-  password: Joi.string() // Contraseña actual, podría ser necesaria para cambiar email o contraseña
+  telefono: Joi.string()
+    .pattern(/^\+?[0-9\s-()]{7,20}$/)
+    .optional()
+    .allow(null, '')
+    .messages({
+      "string.base": "El teléfono debe ser de tipo string.",
+      "string.pattern.base": "El formato del teléfono es inválido.",
+    }),
+  password: Joi.string()
     .min(8)
     .max(100)
-    .pattern(/^[a-zA-Z0-9@$!%*?&]+$/)
-    .optional() // Opcional, puede que no siempre se requiera
+    .pattern(passwordPattern)
+    .required()
     .messages({
       "string.empty": "La contraseña no puede estar vacía.",
       "string.base": "La contraseña debe ser de tipo string.",
       "string.min": "La contraseña debe tener como mínimo {#limit} caracteres.",
       "string.max": "La contraseña debe tener como máximo {#limit} caracteres.",
-      "string.pattern.base": "La contraseña contiene caracteres no permitidos o no cumple con los requisitos de complejidad.",
+      "string.pattern.base": "La contraseña debe tener al menos 8 caracteres, incluyendo una mayúscula, una minúscula y un número.",
+      "any.required": "La contraseña es obligatoria.",
     }),
+  roles: Joi.array()
+    .items(
+      Joi.alternatives().try(
+        Joi.number().integer().positive(),
+        Joi.string().min(3).max(50)
+      )
+    )
+    .min(1)
+    .optional()
+    .messages({
+      "array.base": "El campo 'roles' debe ser un array.",
+      "array.min": "Se debe asignar al menos un rol.",
+      "alternatives.types": "Cada rol debe ser un ID numérico o un nombre de rol válido."
+    }),
+  activo: Joi.boolean()
+    .default(true)
+    .messages({
+      "boolean.base": "El estado 'activo' debe ser un valor booleano (true/false)."
+    })
+})
+.unknown(false)
+.messages({
+  "object.unknown": "No se permiten propiedades adicionales en la creación del usuario.",
+});
 
-  newPassword: Joi.string() // Nueva contraseña, solo si se va a cambiar
+
+// 3. Esquema para el Cuerpo de la Solicitud al Actualizar un Usuario (Update)
+export const userBodyValidation = Joi.object({
+  nombres: Joi.array()
+    .items(
+      Joi.string()
+        .min(2)
+        .max(50)
+        .pattern(namePattern)
+        .messages({
+          "string.base": "Cada nombre debe ser de tipo string.",
+          "string.empty": "Un nombre no puede estar vacío.",
+          "string.min": "Un nombre debe tener como mínimo {#limit} caracteres.",
+          "string.max": "Un nombre debe tener como máximo {#limit} caracteres.",
+          "string.pattern.base": "Un nombre solo puede contener letras, espacios, apóstrofes o guiones.",
+        })
+    )
+    .min(1)
+    .optional(),
+  apellidos: Joi.array()
+    .items(
+      Joi.string()
+        .min(2)
+        .max(50)
+        .pattern(namePattern)
+        .messages({
+          "string.base": "Cada apellido debe ser de tipo string.",
+          "string.empty": "Un apellido no puede estar vacío.",
+          "string.min": "Un apellido debe tener como mínimo {#limit} caracteres.",
+          "string.max": "Un apellido debe tener como máximo {#limit} caracteres.",
+          "string.pattern.base": "Un apellido solo puede contener letras, espacios, apóstrofes o guiones.",
+        })
+    )
+    .min(1)
+    .optional(), // Opcional para la actualización
+  fechaNacimiento: Joi.date()
+    .iso()
+    .less('now')
+    .optional()
+    .messages({
+      "date.base": "La fecha de nacimiento debe ser una fecha válida.",
+      "date.format": "La fecha de nacimiento debe estar en formato ISO (YYYY-MM-DD).",
+      "date.less": "La fecha de nacimiento debe ser anterior a la fecha actual.",
+    }),
+  email: Joi.string()
+    .email({ tlds: { allow: false } })
+    .min(5)
+    .max(255)
+    .custom(domainEmailValidator, "Validación de dominio de correo electrónico")
+    .optional()
+    .messages({
+      "string.base": "El correo electrónico debe ser de tipo string.",
+      "string.email": "El formato del correo electrónico es inválido.",
+      "string.min": "El correo electrónico debe tener como mínimo {#limit} caracteres.",
+      "string.max": "El correo electrónico debe tener como máximo {#limit} caracteres.",
+    }),
+  telefono: Joi.string()
+    .pattern(/^\+?[0-9\s-()]{7,20}$/)
+    .optional()
+    .allow(null, '')
+    .messages({
+      "string.base": "El teléfono debe ser de tipo string.",
+      "string.pattern.base": "El formato del teléfono es inválido.",
+    }),
+  newPassword: Joi.string()
     .min(8)
     .max(100)
-    .pattern(/^[a-zA-Z0-9@$!%*?&]+$/)
+    .pattern(passwordPattern)
     .optional()
-    .allow('') // Permitir vacío si no se quiere cambiar, o usar .when()
+    .allow(null, '')
     .messages({
       "string.base": "La nueva contraseña debe ser de tipo string.",
       "string.min": "La nueva contraseña debe tener como mínimo {#limit} caracteres.",
       "string.max": "La nueva contraseña debe tener como máximo {#limit} caracteres.",
-      "string.pattern.base": "La nueva contraseña contiene caracteres no permitidos o no cumple con los requisitos de complejidad.",
+      "string.pattern.base": "La nueva contraseña debe tener al menos 8 caracteres, incluyendo una mayúscula, una minúscula y un número.",
     }),
-
-  rol: Joi.string()
-    .min(3)
-    .max(50)
+  currentPassword: Joi.string().when('newPassword', {
+    is: Joi.exist(),
+    then: Joi.required(),
+    otherwise: Joi.optional()
+  }).messages({ 'any.required': 'La contraseña actual es requerida para cambiar la contraseña.'}),
+  roles: Joi.array()
+    .items(
+      Joi.alternatives().try(
+        Joi.number().integer().positive(),
+        Joi.string().min(3).max(50)
+      )
+    )
+    .min(1)
     .optional()
     .messages({
-      "string.base": "El rol debe ser de tipo string.",
-      "string.min": "El rol debe tener como mínimo {#limit} caracteres.",
-      "string.max": "El rol debe tener como máximo {#limit} caracteres.",
+      "array.base": "El campo 'roles' debe ser un array.",
+      "array.min": "Se debe asignar al menos un rol si se actualiza.",
+      "alternatives.types": "Cada rol debe ser un ID numérico o un nombre de rol válido."
     }),
-
   activo: Joi.boolean()
     .optional()
     .messages({
-        "boolean.base": "El campo activo debe ser un valor booleano (true/false)."
+      "boolean.base": "El estado 'activo' debe ser un valor booleano (true/false)."
     })
 })
-.or( // Asegura que al menos uno de estos campos esté presente para una actualización
-    "nombresPila",
+  .or(
+    "nombres",
     "apellidos",
-    "rut",
+    "fechaNacimiento",
     "email",
-    "newPassword", // si se envía newPassword, probablemente password también debería ser requerido (lógica con .with o .and)
-    "rol",
+    "telefono",
+    "newPassword",
+    "roles",
     "activo"
   )
-.when(Joi.object({ newPassword: Joi.string().required().not('') }).unknown(), { // Si newPassword está presente y no vacío
-    then: Joi.object({ password: Joi.string().required() }) // entonces password (actual) es requerido
-})
-.unknown(false)
-.messages({
-  "object.unknown": "No se permiten propiedades adicionales en la solicitud de actualización.",
-  "object.missing": "Debes proporcionar al menos un campo para actualizar.",
-  "object.with": "Si actualizas la contraseña, debes proporcionar tu contraseña actual.",
-});
-
-
-// Tu userQueryValidation (sin cambios significativos necesarios para nombresPila/apellidos, ya que no son comunes en queries)
-export const userQueryValidation = Joi.object({
-  id: Joi.number()
-    .integer()
-    .positive()
-    .messages({
-      "number.base": "El id debe ser un número.",
-      "number.integer": "El id debe ser un número entero.",
-      "number.positive": "El id debe ser un número positivo.",
-    }),
-  email: Joi.string()
-    .min(10)
-    .max(255)
-    .email({ tlds: { allow: false } })
-    .custom(domainEmailValidator, "Validación dominio email")
-    .messages({
-      "string.empty": "El correo electrónico no puede estar vacío.",
-      "string.base": "El correo electrónico debe ser de tipo string.",
-      "string.email": "El correo electrónico debe finalizar en @gmail.cl.", // Ajustar si es necesario
-      "string.min": "El correo electrónico debe tener como mínimo {#limit} caracteres.",
-      "string.max": "El correo electrónico debe tener como máximo {#limit} caracteres.",
-    }),
-    rut: Joi.string()
-    .min(9)
-    .max(12)
-    .pattern(/^(?:(?:[1-9]\d{0}|[1-2]\d{1})(\.\d{3}){2}|[1-9]\d{6}|[1-2]\d{7}|29\.999\.999|29999999)-[\dkK]$/)
-    .messages({
-      "string.empty": "El rut no puede estar vacío.",
-      "string.base": "El rut debe ser de tipo string.",
-      "string.min": "El rut debe tener como mínimo {#limit} caracteres.",
-      "string.max": "El rut debe tener como máximo {#limit} caracteres.",
-      "string.pattern.base": "Formato rut inválido, debe ser xx.xxx.xxx-x o xxxxxxxx-x.",
-    }),
-})
-  .or("id", "email", "rut")
   .unknown(false)
   .messages({
-    "object.unknown": "No se permiten propiedades adicionales en los parámetros de consulta.",
-    "object.missing": "Debes proporcionar al menos un parámetro de consulta: id, email o rut.",
+    "object.unknown": "No se permiten propiedades adicionales en la actualización del usuario.",
+    "object.missing": "Debes proporcionar al menos un campo para actualizar.",
   });
