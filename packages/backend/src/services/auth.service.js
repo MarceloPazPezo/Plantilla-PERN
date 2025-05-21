@@ -1,5 +1,5 @@
 "use strict";
-import User from "../entity/user.entity.js";
+import User from "../entities/user.entity.js";
 import jwt from "jsonwebtoken";
 import { AppDataSource } from "../config/configDb.js";
 import { comparePassword, encryptPassword } from "../helpers/bcrypt.helper.js";
@@ -8,32 +8,57 @@ import { ACCESS_TOKEN_SECRET } from "../config/configEnv.js";
 export async function loginService(user) {
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const { email, password } = user;
-
+    const { rut, password } = user;
     const createErrorMessage = (dataInfo, message) => ({
       dataInfo,
-      message
+      message,
     });
 
-    const userFound = await userRepository.findOne({
-      where: { email }
-    });
+    const userFound = await userRepository
+      .createQueryBuilder("user")
+      .leftJoinAndSelect("user.roles", "role")
+      .leftJoinAndSelect("role.permisos", "permission")
+      .select([
+        "user.id",
+        "user.nombres",
+        "user.apellidos",
+        "user.email",
+        "user.rut",
+        "user.activo",
+        "user.hashedPassword",
+        "role.id",
+        "role.nombre",
+        "permission.nombre",
+      ])
+      .where("user.rut = :rut", { rut: rut })
+      .getOne();
 
     if (!userFound) {
-      return [null, createErrorMessage("email", "El correo electrónico es incorrecto")];
+      return [null, createErrorMessage("rut", "El rut es incorrecto")];
     }
 
-    const isMatch = await comparePassword(password, userFound.password);
+    if (!userFound.activo) {
+      return [null, createErrorMessage("estado", "La cuenta de usuario está inactiva. Por favor, contacta al administrador.")];
+    }
+
+    const isMatch = await comparePassword(password, userFound.hashedPassword);
 
     if (!isMatch) {
-      return [null, createErrorMessage("password", "La contraseña es incorrecta")];
+      return [
+        null,
+        createErrorMessage("password", "La contraseña es incorrecta"),
+      ];
     }
 
     const payload = {
-      nombreCompleto: userFound.nombreCompleto,
+      id: userFound.id,
+      nombres: userFound.nombres,
       email: userFound.email,
       rut: userFound.rut,
-      rol: userFound.rol,
+      roles: userFound.roles.map((r) => ({
+        nombre: r.nombre,
+        permisos: r.permisos ? r.permisos.map((p) => p.nombre) : [],
+      })),
     };
 
     const accessToken = jwt.sign(payload, ACCESS_TOKEN_SECRET, {
@@ -47,7 +72,6 @@ export async function loginService(user) {
   }
 }
 
-
 export async function registerService(user) {
   try {
     const userRepository = AppDataSource.getRepository(User);
@@ -56,7 +80,7 @@ export async function registerService(user) {
 
     const createErrorMessage = (dataInfo, message) => ({
       dataInfo,
-      message
+      message,
     });
 
     const existingEmailUser = await userRepository.findOne({
@@ -64,8 +88,9 @@ export async function registerService(user) {
         email,
       },
     });
-    
-    if (existingEmailUser) return [null, createErrorMessage("email", "Correo electrónico en uso")];
+
+    if (existingEmailUser)
+      return [null, createErrorMessage("email", "Correo electrónico en uso")];
 
     const existingRutUser = await userRepository.findOne({
       where: {
@@ -73,7 +98,8 @@ export async function registerService(user) {
       },
     });
 
-    if (existingRutUser) return [null, createErrorMessage("rut", "Rut ya asociado a una cuenta")];
+    if (existingRutUser)
+      return [null, createErrorMessage("rut", "Rut ya asociado a una cuenta")];
 
     const newUser = userRepository.create({
       nombreCompleto,
